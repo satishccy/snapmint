@@ -104,7 +104,7 @@ export default function PhotoBooth() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Photo Booth</h1>
           <p className="text-muted-foreground">
-            Track your print requests and see what others are printing
+            Track your print requests.
           </p>
           {total > 0 && (
             <p className="text-sm text-muted-foreground mt-2">
@@ -130,7 +130,7 @@ export default function PhotoBooth() {
               <PrintStatusCard
                 key={request.id}
                 printRequest={request}
-                imageUrl={request.photos?.image_url}
+                // imageUrl={request.photos?.image_url}
                 title={request.photos?.title}
                 showWalletPrefix={true}
               />

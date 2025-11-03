@@ -26,7 +26,7 @@ export function Layout({ children }: LayoutProps) {
         <div className="container flex h-14 max-w-screen-2xl items-center justify-between px-4">
           {/* Left: Logo */}
           <Link to="/" className="flex items-center gap-2">
-            <div className="bg-gradient-primary rounded-lg p-1.5">
+            <div className="bg-primary rounded-lg p-1.5">
               <Camera className="h-5 w-5 text-primary-foreground" />
             </div>
             <span className="font-bold text-lg hidden sm:inline">

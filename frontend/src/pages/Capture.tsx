@@ -34,9 +34,7 @@ export default function Capture() {
   const [uploading, setUploading] = useState(false);
   const { activeAddress, transactionSigner } = useWallet();
   const { activeNetwork } = useNetwork();
-  const [facingMode, setFacingMode] = useState<"user" | "environment">(
-    "environment"
-  );
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
   const [flashOn, setFlashOn] = useState(false);
   const [photoFromCamera, setPhotoFromCamera] = useState(false);
   const [mintDialogOpen, setMintDialogOpen] = useState(false);
@@ -50,16 +48,12 @@ export default function Capture() {
     if (cameraActive) {
       const initCamera = async () => {
         try {
-          // Stop existing stream if any
           if (streamRef.current) {
             streamRef.current.getTracks().forEach((track) => track.stop());
           }
 
           const constraints: MediaStreamConstraints = {
-            video: {
-              facingMode: facingMode,
-              ...(flashOn && { torch: true }), // Attempt to enable torch/flash if supported
-            },
+            video: { facingMode: facingMode, ...(flashOn && { torch: true }) },
             audio: false,
           };
 
@@ -68,7 +62,6 @@ export default function Capture() {
             videoRef.current.srcObject = stream;
             streamRef.current = stream;
           } else {
-            // In case the component unmounts quickly after camera is activated
             stream.getTracks().forEach((track) => track.stop());
           }
         } catch (error) {
@@ -88,10 +81,7 @@ export default function Capture() {
     };
   }, [cameraActive, facingMode, flashOn]);
 
-  const startCamera = () => {
-    setCameraActive(true);
-  };
-
+  const startCamera = () => setCameraActive(true);
   const stopCamera = () => {
     setCameraActive(false);
     if (streamRef.current) {
@@ -100,13 +90,10 @@ export default function Capture() {
     }
   };
 
-  const toggleCamera = () => {
+  const toggleCamera = () =>
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
-  };
 
-  const toggleFlash = () => {
-    setFlashOn((prev) => !prev);
-  };
+  const toggleFlash = () => setFlashOn((prev) => !prev);
 
   const capturePhoto = () => {
     if (videoRef.current) {
@@ -118,7 +105,7 @@ export default function Capture() {
         ctx.drawImage(videoRef.current, 0, 0);
         const imageData = canvas.toDataURL("image/jpeg");
         setCapturedImage(imageData);
-        setPhotoFromCamera(true); // Mark that photo came from camera
+        setPhotoFromCamera(true);
         setCameraActive(false);
       }
     }
@@ -130,7 +117,7 @@ export default function Capture() {
       const reader = new FileReader();
       reader.onload = (event) => {
         setCapturedImage(event.target?.result as string);
-        setPhotoFromCamera(false); // Mark that photo came from upload
+        setPhotoFromCamera(false);
       };
       reader.readAsDataURL(file);
     }
@@ -138,68 +125,49 @@ export default function Capture() {
 
   const handleMint = async () => {
     if (!capturedImage) return;
-    if (!activeAddress) {
-      toast.error("Please connect your wallet to mint");
-      return;
-    }
+    if (!activeAddress) return toast.error("Please connect your wallet to mint");
+    if (!mintName.trim()) return toast.error("Please enter a name for your photo");
 
-    if (!mintName || mintName.trim() === "") {
-      toast.error("Please enter a name for your photo");
-      return;
-    }
-
-    // Close the dialog
     setMintDialogOpen(false);
-
     setUploading(true);
     try {
       const ipfs = new IPFS("pinata", {
         jwt: import.meta.env.VITE_PINATA_JWT,
         provider: "pinata",
       });
-      const extensionFromBase64 = capturedImage.split(";")[0].split("/")[1];
+
+      const extension = capturedImage.split(";")[0].split("/")[1];
       const imageFile = new File(
-        [await fetch(capturedImage).then((res) => res.blob())],
-        `${Date.now()}.${extensionFromBase64}`,
-        { type: `image/${extensionFromBase64}` }
+        [await fetch(capturedImage).then((r) => r.blob())],
+        `${Date.now()}.${extension}`,
+        { type: `image/${extension}` }
       );
 
-      const mintNameValue = mintName.trim() || "Untitled Photo";
-      const mintDescriptionValue = mintDescription.trim() || undefined;
-
       const mint = await Arc3.create({
-        name: mintNameValue,
+        name: mintName.trim(),
         unitName: "UNT",
         total: 1,
         decimals: 0,
         creator: { address: activeAddress, signer: transactionSigner },
         image: { file: imageFile, name: imageFile.name },
         network: activeNetwork as Network,
-        properties: {
-          mintedAt: Date.now(),
-          ...(mintDescriptionValue && { description: mintDescriptionValue }),
-        },
-        ipfs: ipfs,
+        properties: { mintedAt: Date.now(), description: mintDescription.trim() },
+        ipfs,
       });
-      toast.success("Photo minted successfully");
 
-      // Reset form
+      toast.success("Photo minted successfully");
+      navigate(`/photo/${mint.assetId}`);
       setMintName("");
       setMintDescription("");
-
-      navigate(`/photo/${mint.assetId}`);
     } catch (error: any) {
-      toast.error(error.message || "Failed to save photo");
+      toast.error(error.message || "Failed to mint photo");
     } finally {
       setUploading(false);
     }
   };
 
   const handleOpenMintDialog = () => {
-    if (!activeAddress) {
-      toast.error("Please connect your wallet to mint");
-      return;
-    }
+    if (!activeAddress) return toast.error("Please connect your wallet to mint");
     setMintDialogOpen(true);
   };
 
@@ -213,27 +181,20 @@ export default function Capture() {
 
   return (
     <Layout>
-      <div className="h-[calc(100vh-3.6rem)] flex flex-col bg-background overflow-hidden">
+      <div className="h-[calc(100vh-3.6rem)] flex flex-col bg-background text-foreground overflow-hidden transition-colors duration-300">
         {/* Camera/Preview Area */}
-        <div className="flex-1 relative bg-black overflow-hidden flex items-center justify-center">
+        <div className="flex-1 relative bg-background overflow-hidden flex items-center justify-center">
           {!capturedImage && !cameraActive && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 p-8 overflow-auto">
-              <div className="bg-gradient-primary rounded-full p-8 shadow-glow">
+              <div className="bg-primary rounded-full p-8">
                 <Camera className="h-16 w-16 text-primary-foreground" />
               </div>
-              <h2 className="text-2xl font-bold text-white">
-                Capture a Moment
-              </h2>
-              <p className="text-white/70 text-center max-w-sm">
-                Take a photo or upload from your gallery to start minting
-                memories
+              <h2 className="text-2xl font-bold text-foreground">Capture a Moment</h2>
+              <p className="text-muted-foreground text-center max-w-sm">
+                Take a photo or upload from your gallery to start minting memories
               </p>
               <div className="flex gap-4">
-                <Button
-                  size="lg"
-                  onClick={startCamera}
-                  className="rounded-full shadow-glow"
-                >
+                <Button size="lg" onClick={startCamera} className="rounded-full">
                   <Camera className="h-5 w-5 mr-2" />
                   Open Camera
                 </Button>
@@ -241,7 +202,7 @@ export default function Capture() {
                   size="lg"
                   variant="outline"
                   onClick={() => fileInputRef.current?.click()}
-                  className="rounded-full bg-white/10 border-white/20 text-white hover:bg-white/20"
+                  className="rounded-full"
                 >
                   <Upload className="h-5 w-5 mr-2" />
                   Upload
@@ -265,13 +226,12 @@ export default function Capture() {
                 playsInline
                 className="max-w-full max-h-full w-auto h-auto object-contain"
               />
-              {/* Top Controls - Back Button */}
               <div className="absolute top-4 left-4 z-20">
                 <Button
                   size="icon"
                   variant="outline"
                   onClick={stopCamera}
-                  className="rounded-full bg-black/50 border-white/20 text-white hover:bg-black/70 backdrop-blur"
+                  className="rounded-full bg-background/70 text-foreground border-border backdrop-blur"
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
@@ -295,7 +255,7 @@ export default function Capture() {
               size="icon"
               variant="outline"
               onClick={toggleCamera}
-              className="rounded-full bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur"
+              className="rounded-full bg-background/50 border-border text-foreground backdrop-blur"
             >
               <FlipHorizontal className="h-5 w-5" />
             </Button>
@@ -303,9 +263,9 @@ export default function Capture() {
             <Button
               size="lg"
               onClick={capturePhoto}
-              className="rounded-full h-20 w-20 bg-white hover:bg-white/90 shadow-2xl ring-4 ring-white/30 hover:ring-white/50 transition-all"
+              className="rounded-full h-20 w-20 bg-primary hover:bg-primary-hover shadow-2xl ring-4 ring-primary/30 hover:ring-primary/50 transition-all"
             >
-              <Camera className="h-10 w-10 text-gray-800" />
+              <Camera className="h-10 w-10 text-primary-foreground" />
             </Button>
 
             <Button
@@ -315,14 +275,10 @@ export default function Capture() {
               className={`rounded-full backdrop-blur ${
                 flashOn
                   ? "bg-yellow-400/30 border-yellow-400/50 text-yellow-300 hover:bg-yellow-400/40"
-                  : "bg-white/10 border-white/20 text-white hover:bg-white/20"
+                  : "bg-background/50 border-border text-foreground hover:bg-background/70"
               }`}
             >
-              {flashOn ? (
-                <Zap className="h-5 w-5 fill-yellow-300" />
-              ) : (
-                <ZapOff className="h-5 w-5" />
-              )}
+              {flashOn ? <Zap className="h-5 w-5" /> : <ZapOff className="h-5 w-5" />}
             </Button>
           </div>
         )}
@@ -333,7 +289,7 @@ export default function Capture() {
               size="lg"
               variant="outline"
               onClick={retake}
-              className="rounded-full bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur"
+              className="rounded-full bg-background/70 border-border text-foreground hover:bg-background/80 backdrop-blur"
             >
               <X className="h-5 w-5 mr-2" />
               Retake
@@ -342,7 +298,7 @@ export default function Capture() {
               size="lg"
               onClick={handleOpenMintDialog}
               disabled={uploading}
-              className="rounded-full shadow-glow"
+              className="rounded-full"
             >
               <Check className="h-5 w-5 mr-2" />
               {uploading ? "Minting..." : "Mint Photo"}
@@ -352,12 +308,11 @@ export default function Capture() {
 
         {/* Mint Dialog */}
         <Dialog open={mintDialogOpen} onOpenChange={setMintDialogOpen}>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[425px] bg-background text-foreground">
             <DialogHeader>
               <DialogTitle>Mint Your Photo</DialogTitle>
               <DialogDescription>
-                Add optional details about your photo before minting it as an
-                NFT.
+                Add optional details about your photo before minting it as an NFT.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -385,18 +340,10 @@ export default function Capture() {
               </div>
             </div>
             <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setMintDialogOpen(false)}
-                disabled={uploading}
-              >
+              <Button variant="outline" onClick={() => setMintDialogOpen(false)} disabled={uploading}>
                 Cancel
               </Button>
-              <Button
-                onClick={handleMint}
-                disabled={uploading}
-                className="shadow-glow"
-              >
+              <Button onClick={handleMint} disabled={uploading} className="shadow-glow">
                 {uploading ? "Minting..." : "Mint Photo"}
               </Button>
             </DialogFooter>

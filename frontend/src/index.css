@@ -2,13 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
 @layer base {
   :root {
-    /* Snap Mint - Light Theme (White base with Teal accents) */
+    /* Blue & White - Light Theme */
     --background: 0 0% 100%;
     --foreground: 0 0% 10%;
 
@@ -18,21 +14,21 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 10%;
 
-    /* Teal primary accent */
-    --primary: 174 100% 37%;
+    /* Primary Blue */
+    --primary: 240 87% 56%;
     --primary-foreground: 0 0% 100%;
-    
-    /* Lighter teal for hover states */
-    --primary-hover: 174 100% 45%;
-    --primary-glow: 174 100% 50%;
 
-    --secondary: 0 0% 95%;
+    /* Hover & Glow variations */
+    --primary-hover: 240 87% 63%;
+    --primary-glow: 240 87% 68%;
+
+    --secondary: 240 20% 96%;
     --secondary-foreground: 0 0% 10%;
 
     --muted: 0 0% 96%;
     --muted-foreground: 0 0% 45%;
 
-    --accent: 174 100% 37%;
+    --accent: 240 87% 56%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
@@ -40,24 +36,23 @@ All colors MUST be HSL.
 
     --border: 0 0% 90%;
     --input: 0 0% 90%;
-    --ring: 174 100% 37%;
+    --ring: 240 87% 56%;
 
     --radius: 0.75rem;
 
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(174 100% 37%), hsl(174 100% 50%));
+    --gradient-primary: linear-gradient(135deg, hsl(240 87% 56%), hsl(240 87% 68%));
     --gradient-overlay: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 100%);
-    
+
     /* Shadows */
-    --shadow-glow: 0 0 30px hsl(174 100% 37% / 0.3);
+    --shadow-glow: 0 0 30px hsl(240 87% 56% / 0.3);
     --shadow-card: 0 4px 16px rgba(0,0,0,0.08);
-    
-    /* Transitions */
+
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .dark {
-    /* Snap Mint - Dark Theme (Black base with Teal accents) */
+    /* Blue & White - Dark Theme */
     --background: 0 0% 8%;
     --foreground: 0 0% 98%;
 
@@ -67,12 +62,12 @@ All colors MUST be HSL.
     --popover: 0 0% 10%;
     --popover-foreground: 0 0% 98%;
 
-    /* Teal primary accent (slightly brighter in dark mode) */
-    --primary: 174 100% 45%;
+    /* Brighter blue for dark mode */
+    --primary: 240 87% 63%;
     --primary-foreground: 0 0% 10%;
     
-    --primary-hover: 174 100% 52%;
-    --primary-glow: 174 100% 55%;
+    --primary-hover: 240 87% 70%;
+    --primary-glow: 240 87% 75%;
 
     --secondary: 0 0% 16%;
     --secondary-foreground: 0 0% 98%;
@@ -80,7 +75,7 @@ All colors MUST be HSL.
     --muted: 0 0% 18%;
     --muted-foreground: 0 0% 60%;
 
-    --accent: 174 100% 45%;
+    --accent: 240 87% 63%;
     --accent-foreground: 0 0% 10%;
 
     --destructive: 0 70% 50%;
@@ -88,14 +83,12 @@ All colors MUST be HSL.
 
     --border: 0 0% 20%;
     --input: 0 0% 20%;
-    --ring: 174 100% 45%;
+    --ring: 240 87% 63%;
 
-    /* Dark mode gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(174 100% 40%), hsl(174 100% 55%));
+    --gradient-primary: linear-gradient(135deg, hsl(240 87% 63%), hsl(240 87% 75%));
     --gradient-overlay: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.9) 100%);
     
-    /* Dark mode shadows */
-    --shadow-glow: 0 0 40px hsl(174 100% 45% / 0.4);
+    --shadow-glow: 0 0 40px hsl(240 87% 63% / 0.4);
     --shadow-card: 0 8px 24px rgba(0,0,0,0.4);
   }
 }
