@@ -9,14 +9,19 @@ const Index = () => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
       <div className="text-center max-w-md">
-        <div className="bg-gradient-primary rounded-3xl p-8 mb-6 shadow-glow inline-block">
-          <Camera className="h-20 w-20 text-primary-foreground" />
+        <div className="bg-primary rounded-3xl p-8 mb-6 inline-block">
+          <img
+            src="public\algorand.png"
+            alt="My Logo"
+            className="h-20 w-20 scale-150 text-primary-foreground"
+          />
         </div>
-        
-        <h1 className="text-4xl font-bold mb-3 bg-gradient-primary bg-clip-text text-transparent">
+
+        <h1 className="text-4xl font-bold mb-3 bg-primary bg-clip-text text-transparent">
           Snap Mint
         </h1>
-        
+        <h2 className="text-2xl font-bold mb-2">Algorand India Summit</h2>
+
         <p className="text-xl text-foreground/80 mb-8">
           Snap a Moment, Mint a Memory
         </p>
@@ -29,7 +34,7 @@ const Index = () => {
               <p className="text-sm text-muted-foreground">Take or upload stunning photos</p>
             </div>
           </div>
-          
+
           <div className="flex items-start gap-3 text-left">
             <Sparkles className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
             <div>
@@ -37,7 +42,7 @@ const Index = () => {
               <p className="text-sm text-muted-foreground">Convert moments into blockchain memories</p>
             </div>
           </div>
-          
+
           <div className="flex items-start gap-3 text-left">
             <Printer className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
             <div>
@@ -47,7 +52,7 @@ const Index = () => {
           </div>
         </div>
 
-        <Button size="lg" onClick={() => navigate("/capture")} className="w-full rounded-full shadow-glow">
+        <Button size="lg" onClick={() => navigate("/capture")} className="w-full rounded-full">
           Get Started
         </Button>
       </div>

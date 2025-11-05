@@ -28,25 +28,13 @@ export function PrintStatusCard({
       } ${className}`}
     >
       <div className="flex flex-row gap-2.5 sm:gap-4">
-        <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden flex-shrink-0">
-          {imageUrl ? (
-            <img
-              src={imageUrl}
-              alt={title || `Asset #${printRequest.asset_id}`}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full bg-muted flex items-center justify-center text-xs text-muted-foreground">
-              <Printer className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
-            </div>
-          )}
-        </div>
+        
 
         <div className="flex-1 min-w-0 flex flex-col gap-0.5 sm:gap-1">
           {/* First line: ID and Status */}
           <div className="flex items-center justify-between gap-2">
-            <Badge variant="outline" className="text-xs">
-              ID: {printRequest.id}
+            <Badge variant="outline" className="text-xl">
+              Queue: {printRequest.id}
             </Badge>
             <Badge
               variant="outline"
@@ -64,16 +52,16 @@ export function PrintStatusCard({
                   : printRequest.status === "in_progress"
                   ? "Printing"
                   : printRequest.status === "completed"
-                  ? "Done"
+                  ? "Printed"
                   : "Collected"}
               </span>
             </Badge>
           </div>
 
           {/* Second line: Title */}
-          <h3 className="font-semibold truncate text-sm sm:text-base">
+          {/* <h3 className="font-semibold truncate text-sm sm:text-base">
             {title || `Asset #${printRequest.asset_id}`}
-          </h3>
+          </h3> */}
 
           {/* Third line: Wallet */}
           <p className="text-xs sm:text-sm text-muted-foreground break-all sm:break-normal">

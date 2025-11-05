@@ -277,7 +277,8 @@ export default function Admin() {
               <TableRow>
                 <TableHead className="w-[80px]">ID</TableHead>
                 <TableHead className="w-[120px]">Image</TableHead>
-                <TableHead>Wallet</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Wallet Address</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[250px]">Actions</TableHead>
               </TableRow>
@@ -317,17 +318,18 @@ export default function Admin() {
                         </div>
                       )}
                     </TableCell>
+                    <TableCell><h3 className="font-semibold truncate text-sm sm:text-base">
+                      {request.photos?.title || `Asset #${request.asset_id}`}
+                    </h3></TableCell>
+
                     <TableCell>
                       <div>
-                        <p className="font-medium">
-                          {request.profiles?.username ||
-                            request.wallet_address.slice(0, 8) + "..."}
-                        </p>
                         <p className="text-xs text-muted-foreground">
                           {request.wallet_address}
                         </p>
                       </div>
                     </TableCell>
+
                     <TableCell>
                       <Badge
                         variant="outline"

@@ -42,7 +42,7 @@ export default function Auth() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="bg-gradient-primary rounded-2xl p-4 mb-4 shadow-glow">
+          <div className="bg-primary rounded-2xl p-4 mb-4">
             <Camera className="h-12 w-12 text-primary-foreground" />
           </div>
           <h1 className="text-3xl font-bold">Snap Mint</h1>
