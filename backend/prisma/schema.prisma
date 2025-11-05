@@ -29,3 +29,12 @@ model PrintRequest {
   @@map("print_requests")
 }
 
+model FreeMint {
+  id            Int               @id @default(autoincrement())
+  wallet_address String           @db.VarChar(255) @unique
+  txid          String            @db.VarChar(255)
+  created_at    DateTime          @default(now())
+
+  @@index([wallet_address])
+  @@map("free_mints")
+}
