@@ -33,9 +33,9 @@ export function PrintStatusCard({
         <div className="flex-1 min-w-0 flex flex-col gap-0.5 sm:gap-1">
           {/* First line: ID and Status */}
           <div className="flex items-center justify-between gap-2">
-            <Badge variant="outline" className="text-xl">
+            <p className="text-md font-semibold">
               Queue: {printRequest.id}
-            </Badge>
+            </p>
             <Badge
               variant="outline"
               className={`flex items-center gap-1 text-xs w-fit ${getStatusColor(

@@ -80,7 +80,10 @@ async function authenticatedRequest<T>(
 // Print Request APIs
 export const printRequestApi = {
   // Create a new print request
-  create: async (walletAddress: string, assetId: number): Promise<PrintRequest> => {
+  create: async (
+    walletAddress: string,
+    assetId: number
+  ): Promise<PrintRequest> => {
     return apiRequest<PrintRequest>("/print-request", {
       method: "POST",
       body: JSON.stringify({
@@ -90,6 +93,28 @@ export const printRequestApi = {
     });
   },
 
+  freeMintStatus: async (
+    walletAddress: string
+  ): Promise<{ status: "claimed" | "not_claimed" }> => {
+    return apiRequest<{ status: "claimed" | "not_claimed" }>(
+      `/free-mint-status/${walletAddress}`
+    );
+  },
+
+  freeMintPoolTxn: async (txn: string): Promise<{ group: string[] }> => {
+    try {
+      return await apiRequest<{ group: string[] }>(`/free-mint-pool-txn`, {
+        method: "POST",
+        body: JSON.stringify({ txn }),
+      });
+    } catch (error: any) {
+      if (error.message.includes("400")) {
+        throw new Error("Free mint already claimed");
+      }
+      throw error;
+    }
+  },
+
   // Check if wallet has a print request
   check: async (walletAddress: string): Promise<PrintRequest | null> => {
     try {
@@ -97,7 +122,10 @@ export const printRequestApi = {
         `/check-print-request/${walletAddress}`
       );
     } catch (error: any) {
-      if (error.message.includes("404") || error.message.includes("No print request found")) {
+      if (
+        error.message.includes("404") ||
+        error.message.includes("No print request found")
+      ) {
         return null;
       }
       throw error;
@@ -105,7 +133,10 @@ export const printRequestApi = {
   },
 
   // Get all print requests (public)
-  getAll: async (page: number = 1, limit: number = 50): Promise<PaginatedResponse<PrintRequest>> => {
+  getAll: async (
+    page: number = 1,
+    limit: number = 50
+  ): Promise<PaginatedResponse<PrintRequest>> => {
     return apiRequest<PaginatedResponse<PrintRequest>>(
       `/print-request?page=${page}&limit=${limit}`
     );
@@ -138,18 +169,21 @@ export const printRequestApi = {
 // Admin APIs
 export const adminApi = {
   // Admin login
-  login: async (username: string, password: string): Promise<{ token: string }> => {
+  login: async (
+    username: string,
+    password: string
+  ): Promise<{ token: string }> => {
     const response = await apiRequest<{ token: string }>("/admin-login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
       credentials: "include", // Include cookies
     });
-    
+
     // Store token for Bearer header usage
     if (response.token) {
       setAdminToken(response.token);
     }
-    
+
     return response;
   },
 
@@ -158,4 +192,3 @@ export const adminApi = {
     removeAdminToken();
   },
 };
-

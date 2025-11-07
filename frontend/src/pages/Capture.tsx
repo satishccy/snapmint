@@ -26,15 +26,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { printRequestApi } from "@/lib/api";
+import algosdk from "algosdk";
 
 export default function Capture() {
   const navigate = useNavigate();
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const { activeAddress, transactionSigner } = useWallet();
+  const { activeAddress, transactionSigner, algodClient } = useWallet();
   const { activeNetwork } = useNetwork();
-  const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
+  const [facingMode, setFacingMode] = useState<"user" | "environment">(
+    "environment"
+  );
   const [flashOn, setFlashOn] = useState(false);
   const [photoFromCamera, setPhotoFromCamera] = useState(false);
   const [mintDialogOpen, setMintDialogOpen] = useState(false);
@@ -43,6 +47,69 @@ export default function Capture() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [freeMintStatus, setFreeMintStatus] = useState<
+    "claimed" | "not_claimed"
+  >("claimed");
+  const [mintableCount, setMintableCount] = useState<number>(0);
+  const [deltaBalance, setDeltaBalance] = useState<number>(0);
+  const [loadingBalance, setLoadingBalance] = useState(false);
+
+  useEffect(() => {
+    if (activeAddress) {
+      printRequestApi
+        .freeMintStatus(activeAddress)
+        .then((res) => {
+          setFreeMintStatus(res.status);
+        })
+        .catch((error) => {
+          toast.error(`Could not check free mint status: ${error.message}`);
+        });
+    }
+  }, [activeAddress]);
+
+  useEffect(() => {
+    const fetchWalletBalance = async () => {
+      if (!activeAddress || !algodClient) return;
+
+      setLoadingBalance(true);
+      try {
+        const accountInfo = await algodClient
+          .accountInformation(activeAddress)
+          .do();
+        const balance = Number(accountInfo.amount.toString());
+        const minBalance = Number(accountInfo.minBalance.toString());
+        const delta = balance - minBalance;
+        setDeltaBalance(delta);
+
+        // Each mint costs 0.101 algos = 101000 microalgos
+        const mintCostMicroalgos = algosdk.algosToMicroalgos(0.101);
+
+        // Calculate how many mints can be done with available balance
+        // If free mint is available, the first one is free (covered by fee pool)
+        // Additional mints require 0.101 algos each
+        let count = 0;
+        if (freeMintStatus === "not_claimed") {
+          // First mint is free, then count how many more can be done with balance
+          count = 1 + Math.floor(delta / mintCostMicroalgos);
+        } else {
+          // No free mint, count how many can be done with balance
+          count = Math.floor(delta / mintCostMicroalgos);
+        }
+
+        setMintableCount(Math.max(0, count));
+      } catch (error: any) {
+        console.error("Failed to fetch wallet balance:", error);
+        setMintableCount(0);
+        setDeltaBalance(0);
+      } finally {
+        setLoadingBalance(false);
+      }
+    };
+
+    if (mintDialogOpen && activeAddress) {
+      fetchWalletBalance();
+    }
+  }, [mintDialogOpen, activeAddress, algodClient, freeMintStatus]);
 
   useEffect(() => {
     if (cameraActive) {
@@ -125,8 +192,10 @@ export default function Capture() {
 
   const handleMint = async () => {
     if (!capturedImage) return;
-    if (!activeAddress) return toast.error("Please connect your wallet to mint");
-    if (!mintName.trim()) return toast.error("Please enter a name for your photo");
+    if (!activeAddress)
+      return toast.error("Please connect your wallet to mint");
+    if (!mintName.trim())
+      return toast.error("Please enter a name for your photo");
 
     setMintDialogOpen(false);
     setUploading(true);
@@ -143,22 +212,81 @@ export default function Capture() {
         { type: `image/${extension}` }
       );
 
-      const mint = await Arc3.create({
-        name: mintName.trim(),
-        unitName: "UNT",
-        total: 1,
-        decimals: 0,
-        creator: { address: activeAddress, signer: transactionSigner },
-        image: { file: imageFile, name: imageFile.name },
-        network: activeNetwork as Network,
-        properties: { mintedAt: Date.now(), description: mintDescription.trim() },
-        ipfs,
-      });
+      if (freeMintStatus === "not_claimed") {
+        const mint = await Arc3.makeAssetCreateTransaction({
+          name: mintName.trim(),
+          unitName: "UNT",
+          total: 1,
+          decimals: 0,
+          creator: { address: activeAddress, signer: transactionSigner },
+          image: { file: imageFile, name: imageFile.name },
+          network: activeNetwork as Network,
+          properties: {
+            mintedAt: Date.now(),
+            description: mintDescription.trim(),
+          },
+          ipfs,
+        });
 
-      toast.success("Photo minted successfully");
-      navigate(`/photo/${mint.assetId}`);
-      setMintName("");
-      setMintDescription("");
+        const group = await printRequestApi.freeMintPoolTxn(
+          algosdk.bytesToBase64(algosdk.encodeUnsignedTransaction(mint))
+        );
+        const signedPaymentTxn = algosdk.decodeSignedTransaction(
+          algosdk.base64ToBytes(group.group[0])
+        );
+        const decodedGroup = [
+          signedPaymentTxn.txn,
+          ...group.group
+            .slice(1)
+            .map((txn) =>
+              algosdk.decodeUnsignedTransaction(algosdk.base64ToBytes(txn))
+            ),
+        ];
+        console.log(decodedGroup, activeAddress);
+        const txnsToSign = decodedGroup
+          .map((txn, i) => (txn.sender.toString() === activeAddress ? i : null))
+          .filter((txn) => txn !== null);
+
+        toast.info(`Sign ${txnsToSign.length} transactions in your wallet`);
+        const signed = await transactionSigner(decodedGroup, txnsToSign);
+        const signedGroup = [algosdk.base64ToBytes(group.group[0]), ...signed];
+        toast.info("Signed Successfully, Submitting to the network...");
+        const submitted = await algodClient
+          .sendRawTransaction(signedGroup)
+          .do();
+        const txnId = decodedGroup[1].txID();
+        const txnStatus = await algosdk.waitForConfirmation(
+          algodClient,
+          txnId,
+          3
+        );
+        const assetId = Number(txnStatus.assetIndex ?? 0);
+        console.log(txnStatus, txnId, assetId, "fdfd");
+        toast.success("Photo minted successfully");
+        navigate(assetId !== 0 ? `/photo/${assetId}` : `/gallery`);
+        setMintName("");
+        setMintDescription("");
+      } else {
+        const mint = await Arc3.create({
+          name: mintName.trim(),
+          unitName: "UNT",
+          total: 1,
+          decimals: 0,
+          creator: { address: activeAddress, signer: transactionSigner },
+          image: { file: imageFile, name: imageFile.name },
+          network: activeNetwork as Network,
+          properties: {
+            mintedAt: Date.now(),
+            description: mintDescription.trim(),
+          },
+          ipfs,
+        });
+
+        toast.success("Photo minted successfully");
+        navigate(`/photo/${mint.assetId}`);
+        setMintName("");
+        setMintDescription("");
+      }
     } catch (error: any) {
       toast.error(error.message || "Failed to mint photo");
     } finally {
@@ -167,7 +295,8 @@ export default function Capture() {
   };
 
   const handleOpenMintDialog = () => {
-    if (!activeAddress) return toast.error("Please connect your wallet to mint");
+    if (!activeAddress)
+      return toast.error("Please connect your wallet to mint");
     setMintDialogOpen(true);
   };
 
@@ -189,12 +318,19 @@ export default function Capture() {
               <div className="bg-primary rounded-full p-8">
                 <Camera className="h-16 w-16 text-primary-foreground" />
               </div>
-              <h2 className="text-2xl font-bold text-foreground">Capture a Moment</h2>
+              <h2 className="text-2xl font-bold text-foreground">
+                Capture a Moment
+              </h2>
               <p className="text-muted-foreground text-center max-w-sm">
-                Take a photo or upload from your gallery to start minting memories
+                Take a photo or upload from your gallery to start minting
+                memories
               </p>
               <div className="flex gap-4">
-                <Button size="lg" onClick={startCamera} className="rounded-full">
+                <Button
+                  size="lg"
+                  onClick={startCamera}
+                  className="rounded-full"
+                >
                   <Camera className="h-5 w-5 mr-2" />
                   Open Camera
                 </Button>
@@ -278,7 +414,11 @@ export default function Capture() {
                   : "bg-background/50 border-border text-foreground hover:bg-background/70"
               }`}
             >
-              {flashOn ? <Zap className="h-5 w-5" /> : <ZapOff className="h-5 w-5" />}
+              {flashOn ? (
+                <Zap className="h-5 w-5" />
+              ) : (
+                <ZapOff className="h-5 w-5" />
+              )}
             </Button>
           </div>
         )}
@@ -312,10 +452,68 @@ export default function Capture() {
             <DialogHeader>
               <DialogTitle>Mint Your Photo</DialogTitle>
               <DialogDescription>
-                Add optional details about your photo before minting it as an NFT.
+                Add optional details about your photo before minting it as an
+                NFT.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              {/* Free Mint Status and Mintable Count */}
+              <div className="grid gap-2 p-4 rounded-lg border bg-muted/50">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Free Mint Status:</span>
+                  <span
+                    className={`text-sm font-semibold ${
+                      freeMintStatus === "not_claimed"
+                        ? "text-green-600 dark:text-green-400"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {freeMintStatus === "not_claimed"
+                      ? "Available"
+                      : "Not Available"}
+                  </span>
+                </div>
+                {loadingBalance ? (
+                  <div className="text-xs text-muted-foreground">
+                    Loading balance...
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Mintable NFTs:</span>
+                    <span className="text-sm font-semibold">
+                      {mintableCount} NFT{mintableCount !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                )}
+                {!loadingBalance && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Available balance:{" "}
+                    {algosdk
+                      .microalgosToAlgos(Math.max(0, deltaBalance))
+                      .toFixed(3)}{" "}
+                    ALGO
+                    {freeMintStatus === "not_claimed" && mintableCount > 0 && (
+                      <span className="block mt-1">
+                        (1 free mint + {mintableCount - 1} paid mint
+                        {mintableCount - 1 !== 1 ? "s" : ""} with your balance)
+                      </span>
+                    )}
+                    {freeMintStatus === "claimed" && mintableCount > 0 && (
+                      <span className="block mt-1">
+                        ({mintableCount * 0.101} ALGO needed for {mintableCount}{" "}
+                        mint{mintableCount !== 1 ? "s" : ""})
+                      </span>
+                    )}
+                    {mintableCount === 0 && freeMintStatus === "claimed" && (
+                      <span className="block mt-1 text-orange-600 dark:text-orange-400">
+                        Insufficient balance for minting (need at least 0.101
+                        ALGO)
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="grid gap-2">
                 <Label htmlFor="name">Name *</Label>
                 <Input
@@ -340,10 +538,18 @@ export default function Capture() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setMintDialogOpen(false)} disabled={uploading}>
+              <Button
+                variant="outline"
+                onClick={() => setMintDialogOpen(false)}
+                disabled={uploading}
+              >
                 Cancel
               </Button>
-              <Button onClick={handleMint} disabled={uploading} className="shadow-glow">
+              <Button
+                onClick={handleMint}
+                disabled={uploading}
+                className="shadow-glow"
+              >
                 {uploading ? "Minting..." : "Mint Photo"}
               </Button>
             </DialogFooter>

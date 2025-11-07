@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import { PrismaClient, PrintRequestStatus } from "@prisma/client";
 import { authenticateAdmin, AuthRequest } from "../middleware/auth";
+import algosdk, { decodeUnsignedTransaction, base64ToBytes } from "algosdk";
+import { algodClient, feePoolAccount, indexerClient } from "../utils";
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -42,6 +44,110 @@ router.post("/print-request", async (req: Request, res: Response) => {
     return res.status(201).json(printRequest);
   } catch (error) {
     console.error("Create print request error:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get(
+  "/free-mint-status/:wallet_address",
+  async (req: Request, res: Response) => {
+    try {
+      const { wallet_address } = req.params;
+
+      const freeMint = await prisma.freeMint.findFirst({
+        where: {
+          wallet_address: wallet_address,
+        },
+      });
+
+      if (freeMint) {
+        try {
+          const txnStatus = await indexerClient
+            .lookupTransactionByID(freeMint.txid)
+            .do();
+          if (txnStatus.transaction.sender === feePoolAccount.addr.toString()) {
+            return res.json({ status: "claimed" });
+          }
+        } catch (error) {}
+      }
+
+      return res.json({ status: "not_claimed" });
+    } catch (error) {
+      console.error("Get free mint status error:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+router.post("/free-mint-pool-txn", async (req: Request, res: Response) => {
+  try {
+    const { txn } = req.body;
+    const decodedTxn = decodeUnsignedTransaction(base64ToBytes(txn));
+    const sender = decodedTxn.sender;
+
+    const freeMint = await prisma.freeMint.findFirst({
+      where: {
+        wallet_address: sender.toString(),
+      },
+    });
+    if (freeMint) {
+      try {
+        const txnStatus = await indexerClient
+          .lookupTransactionByID(freeMint.txid)
+          .do();
+        if (txnStatus.transaction.sender === feePoolAccount.addr.toString()) {
+          return res.status(400).json({ error: "Free mint already claimed" });
+        }
+      } catch (error) {}
+    }
+
+    const st = await algodClient.accountInformation(sender).do();
+    const requiredMintAmount = algosdk.algosToMicroalgos(0.101);
+    const deltaBalance =
+      Number(st.amount.toString()) - Number(st.minBalance.toString());
+    const feePoolAmount = Math.abs(
+      deltaBalance > requiredMintAmount
+        ? requiredMintAmount
+        : deltaBalance - requiredMintAmount
+    );
+    const suggestedParams = await algodClient.getTransactionParams().do();
+    const paymentTxn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+      sender: feePoolAccount.addr,
+      receiver: sender,
+      suggestedParams,
+      amount: feePoolAmount,
+    });
+    const group = [paymentTxn, decodedTxn];
+    const groupTxns = algosdk.assignGroupID(group);
+
+    const signedPaymentTxn = groupTxns[0].signTxn(feePoolAccount.sk);
+
+    const finalGroup = [
+      algosdk.bytesToBase64(signedPaymentTxn),
+      ...groupTxns
+        .slice(1)
+        .map((txn) =>
+          algosdk.bytesToBase64(algosdk.encodeUnsignedTransaction(txn))
+        ),
+    ];
+    if (freeMint) {
+      await prisma.freeMint.update({
+        where: {
+          id: freeMint.id,
+        },
+        data: { txid: groupTxns[0].txID() },
+      });
+    } else {
+      await prisma.freeMint.create({
+        data: {
+          wallet_address: sender.toString(),
+          txid: groupTxns[0].txID(),
+        },
+      });
+    }
+    return res.json({ group: finalGroup });
+  } catch (error) {
+    console.error("Free mint pool check error:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -205,7 +311,10 @@ router.patch(
 
       return res.json(printRequest);
     } catch (error) {
-      if (error instanceof Error && error.message.includes("Record to update does not exist")) {
+      if (
+        error instanceof Error &&
+        error.message.includes("Record to update does not exist")
+      ) {
         return res.status(404).json({ error: "Print request not found" });
       }
       console.error("Update print request error:", error);
@@ -215,4 +324,3 @@ router.patch(
 );
 
 export default router;
-
