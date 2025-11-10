@@ -19,6 +19,18 @@ interface Photo {
   description: string;
 }
 
+function getStatusText(
+  status: "pending" | "in_progress" | "completed" | "collected"
+): string {
+  if (status === "pending")
+    return "Your T‑shirt print request is queued. You’ll be notified when printing starts.";
+  if (status === "in_progress")
+    return "Your T‑shirt is currently being printed. Hang tight.";
+  if (status === "completed")
+    return "Your T‑shirt print is complete and ready for pickup.";
+  if (status === "collected") return "T‑shirt collected. Thanks!";
+}
+
 export default function PhotoDetail() {
   const { id } = useParams<{ id: string }>();
   const { activeNetwork } = useNetwork();
@@ -200,15 +212,15 @@ export default function PhotoDetail() {
               <div className="space-y-3">
                 <div className="p-2.5 sm:p-4 bg-primary/5 border border-primary/20 rounded-lg">
                   <p className="text-sm font-medium text-center">
-                    Your have a print request already
-                  </p>   
+                    {getStatusText(existingPrintRequest.status)}
+                  </p>
                 </div>
                 <PrintStatusCard
-                    printRequest={existingPrintRequest}
-                    imageUrl={printRequestImage}
-                    title={printRequestTitle}
-                    showWalletPrefix={true}
-                  />
+                  printRequest={existingPrintRequest}
+                  imageUrl={printRequestImage}
+                  title={printRequestTitle}
+                  showWalletPrefix={true}
+                />
               </div>
             ) : (
               <Button
