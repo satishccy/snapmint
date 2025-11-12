@@ -6,16 +6,12 @@ import { getStatusColor, getStatusIcon } from "@/lib/utils";
 
 interface PrintStatusCardProps {
   printRequest: PrintRequest;
-  imageUrl?: string;
-  title?: string;
   showWalletPrefix?: boolean; // Show "by" prefix before wallet address
   className?: string;
 }
 
 export function PrintStatusCard({
   printRequest,
-  imageUrl,
-  title,
   showWalletPrefix = false,
   className = "",
 }: PrintStatusCardProps) {

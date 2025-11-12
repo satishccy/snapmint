@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,12 @@ import { Network, AssetFactory } from "arcraft";
 import { useNetwork } from "@txnlab/use-wallet-react";
 import { useWallet } from "@txnlab/use-wallet-react";
 import { WalletConnectButton } from "@/components/WalletConnectButton";
-import { printRequestApi, PrintRequest } from "@/lib/api";
-import { PrintStatusCard } from "@/components/PrintStatusCard";
+import { printRequestApi, PrintRequest, BoothStatus } from "@/lib/api";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { processIpfsUrl } from "@/lib/utils";
+import { PersonalPrintStatusCard } from "@/components/PersonalPrintStatusCard";
 
 interface Photo {
   id: string;
@@ -23,7 +27,7 @@ function getStatusText(
   status: "pending" | "in_progress" | "completed" | "collected"
 ): string {
   if (status === "pending")
-    return "Your T‑shirt print request is queued. You’ll be notified when printing starts.";
+    return "Your T‑shirt print request is queued.";
   if (status === "in_progress")
     return "Your T‑shirt is currently being printed. Hang tight.";
   if (status === "completed")
@@ -45,9 +49,13 @@ export default function PhotoDetail() {
   const [checkingPrintRequest, setCheckingPrintRequest] = useState(false);
   const [printRequestImage, setPrintRequestImage] = useState<string>("");
   const [printRequestTitle, setPrintRequestTitle] = useState<string>("");
+  const [boothStatus, setBoothStatus] = useState<BoothStatus | null>(null);
+  const [tshirtSize, setTshirtSize] = useState<"S" | "M" | "L" | "XL">("M");
+  const [loadingBoothStatus, setLoadingBoothStatus] = useState(false);
 
   useEffect(() => {
     fetchPhoto();
+    fetchBoothStatus();
   }, [id]);
 
   useEffect(() => {
@@ -55,6 +63,12 @@ export default function PhotoDetail() {
       checkPrintRequest();
     }
   }, [activeAddress]);
+
+  const printSpotsLeft = useMemo(
+    () =>
+      boothStatus ? Math.max(0, boothStatus.max_print_requests - boothStatus.current_count) : 0,
+    [boothStatus]
+  );
 
   const fetchPhoto = async () => {
     try {
@@ -70,7 +84,7 @@ export default function PhotoDetail() {
       if ("getImageUrl" in assetIns) {
         setPhoto({
           id: id,
-          image_url: assetIns.getImageUrl(),
+          image_url: processIpfsUrl(assetIns.getImageUrl()),
           title: assetIns.getName(),
           description:
             assetIns.metadata?.description ||
@@ -85,6 +99,18 @@ export default function PhotoDetail() {
       navigate("/gallery");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchBoothStatus = async () => {
+    try {
+      setLoadingBoothStatus(true);
+      const status = await printRequestApi.getBoothStatus();
+      setBoothStatus(status);
+    } catch (error) {
+      console.error("Failed to fetch booth status:", error);
+    } finally {
+      setLoadingBoothStatus(false);
     }
   };
 
@@ -105,7 +131,7 @@ export default function PhotoDetail() {
           );
 
           if ("getImageUrl" in assetIns) {
-            setPrintRequestImage(assetIns.getImageUrl());
+            setPrintRequestImage(processIpfsUrl(assetIns.getImageUrl()));
             setPrintRequestTitle(assetIns.getName());
           }
         } catch (error) {
@@ -125,19 +151,46 @@ export default function PhotoDetail() {
   const handleSendToBooth = async () => {
     if (!photo || !activeAddress || !id) return;
 
+    // Check booth status before submitting
+    if (boothStatus) {
+      if (boothStatus.is_paused) {
+        toast.error(
+          "Print booth is currently paused and not accepting new requests"
+        );
+        setShowPrintConfirm(false);
+        return;
+      }
+      if (!boothStatus.available) {
+        toast.error(
+          `Print request limit reached (${boothStatus.max_print_requests} requests). Please try again later.`
+        );
+        setShowPrintConfirm(false);
+        return;
+      }
+    }
+
     setSending(true);
     try {
-      await printRequestApi.create(activeAddress, Number(id));
+      await printRequestApi.create(activeAddress, Number(id), tshirtSize);
       toast.success("Photo sent to Photo Booth successfully!");
       setShowPrintConfirm(false);
-      // Refresh the print request status
+      // Refresh the print request status and booth status
       await checkPrintRequest();
+      await fetchBoothStatus();
     } catch (error: any) {
       if (error.message.includes("already has a print request")) {
         toast.error(
           "You already have a print request. Each wallet can only submit one."
         );
         await checkPrintRequest();
+      } else if (error.message.includes("paused")) {
+        toast.error(
+          "Print booth is currently paused and not accepting new requests"
+        );
+        await fetchBoothStatus();
+      } else if (error.message.includes("limit reached")) {
+        toast.error(error.message);
+        await fetchBoothStatus();
       } else {
         toast.error(error.message || "Failed to send to Photo Booth");
       }
@@ -191,10 +244,47 @@ export default function PhotoDetail() {
           Back
         </Button>
 
+        {/* Booth Status Banner */}
+        {boothStatus && (
+          <Alert
+            className={`mb-4 ${
+              boothStatus.is_paused || !boothStatus.available
+                ? "border-red-500/50 bg-red-500/10"
+                : "border-green-500/50 bg-green-500/10"
+            }`}
+          >
+            <AlertDescription className="flex md:flex-row flex-col items-start md:items-center gap-2 justify-between">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">
+                  Print Booth:{" "}
+                  {boothStatus.is_paused ? (
+                    <span className="text-red-500">Paused</span>
+                  ) : boothStatus.available ? (
+                    <span className="text-green-500">Available ✓</span>
+                  ) : (
+                    <span className="text-red-500">Full</span>
+                  )}
+                </span>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {printSpotsLeft > 0 ? (
+                  <span className="text-green-500">
+                    {printSpotsLeft} print spots left - submit yours before they run out!{" "}
+                  </span>
+                ) : (
+                  <span className="text-red-500">
+                    No print spots left.{" "}
+                  </span>
+                )}
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="bg-card rounded-lg shadow-card overflow-hidden">
           <div className="relative">
             <img
-              src={photo.image_url}
+              src={processIpfsUrl(photo.image_url)}
               alt={photo.title}
               className="w-full max-h-[60vh] object-contain bg-black"
             />
@@ -215,11 +305,10 @@ export default function PhotoDetail() {
                     {getStatusText(existingPrintRequest.status)}
                   </p>
                 </div>
-                <PrintStatusCard
+                <PersonalPrintStatusCard
                   printRequest={existingPrintRequest}
-                  imageUrl={printRequestImage}
                   title={printRequestTitle}
-                  showWalletPrefix={true}
+                  imageUrl={printRequestImage}
                 />
               </div>
             ) : (
@@ -227,10 +316,21 @@ export default function PhotoDetail() {
                 size="lg"
                 onClick={() => setShowPrintConfirm(true)}
                 className="w-full rounded-full"
-                disabled={checkingPrintRequest}
+                disabled={
+                  checkingPrintRequest ||
+                  loadingBoothStatus ||
+                  (boothStatus !== null &&
+                    (boothStatus.is_paused || !boothStatus.available))
+                }
               >
                 <Printer className="h-5 w-5 mr-2" />
-                {checkingPrintRequest ? "Checking..." : "Send to Photo Booth"}
+                {checkingPrintRequest
+                  ? "Checking..."
+                  : boothStatus?.is_paused
+                  ? "Booth Paused"
+                  : !boothStatus?.available
+                  ? "Booth Full"
+                  : "Send to Photo Booth"}
               </Button>
             )}
           </div>
@@ -243,16 +343,45 @@ export default function PhotoDetail() {
         onOpenChange={setShowPrintConfirm}
         title="Send to Photo Booth?"
         description={
-          <div className="space-y-2">
-            <p>
-              This will reserve the <strong>one print slot</strong> for your
-              account.
-            </p>
-            <p className="text-destructive font-medium">
-              Each user may only send one NFT for printing. This action is
-              final.
-            </p>
-            <p>Continue?</p>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <p>
+                This will reserve the <strong>one print slot</strong> for your
+                account.
+              </p>
+              <p className="text-destructive font-medium">
+                Each user may only send one NFT for printing. This action is
+                final.
+              </p>
+            </div>
+
+            {/* T-Shirt Size Selector */}
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">
+                Select T-Shirt Size:
+              </Label>
+              <RadioGroup
+                value={tshirtSize}
+                onValueChange={(value) =>
+                  setTshirtSize(value as "S" | "M" | "L" | "XL")
+                }
+                className="flex gap-4"
+              >
+                {(["S", "M", "L", "XL"] as const).map((size) => (
+                  <div key={size} className="flex items-center space-x-2">
+                    <RadioGroupItem value={size} id={`size-${size}`} />
+                    <Label
+                      htmlFor={`size-${size}`}
+                      className="cursor-pointer font-medium"
+                    >
+                      {size}
+                    </Label>
+                  </div>
+                ))}
+              </RadioGroup>
+            </div>
+
+            <p className="pt-2">Continue?</p>
           </div>
         }
         onConfirm={handleSendToBooth}

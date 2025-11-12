@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import { useWallet, useNetwork } from "@txnlab/use-wallet-react";
 import { AssetFactory, Network } from "arcraft";
 import { printRequestApi, PrintRequest } from "@/lib/api";
-import { PrintStatusCard } from "@/components/PrintStatusCard";
+import { PersonalPrintStatusCard } from "@/components/PersonalPrintStatusCard";
+import { processIpfsUrl } from "@/lib/utils";
 
 interface Photo {
   id: number;
@@ -64,7 +65,7 @@ export default function Gallery() {
           );
 
           if ("getImageUrl" in assetIns) {
-            setPrintRequestImage(assetIns.getImageUrl());
+            setPrintRequestImage(processIpfsUrl(assetIns.getImageUrl()));
             setPrintRequestTitle(assetIns.getName());
           }
         } catch (error) {
@@ -145,7 +146,7 @@ export default function Gallery() {
 
           let image_url = "";
           if ("getImageUrl" in assetIns) {
-            image_url = assetIns.getImageUrl();
+            image_url = processIpfsUrl(assetIns.getImageUrl());
           } else {
             batchUpdate = batchUpdate.filter((p) => p.id !== assetId);
             continue;
@@ -231,11 +232,10 @@ export default function Gallery() {
                 </div>
               </Card>
             ) : printRequest ? (
-              <PrintStatusCard
+              <PersonalPrintStatusCard
                 printRequest={printRequest}
-                imageUrl={printRequestImage}
+                imageUrl={processIpfsUrl(printRequestImage)}
                 title={printRequestTitle}
-                showWalletPrefix={true}
               />
             ) : null}
           </div>
@@ -281,7 +281,7 @@ export default function Gallery() {
                 >
                   <div className="aspect-square relative">
                     <img
-                      src={photo.image_url}
+                      src={processIpfsUrl(photo.image_url)}
                       alt={photo.name}
                       className="w-full h-full object-cover transition-opacity duration-300"
                       onLoad={(e) => {

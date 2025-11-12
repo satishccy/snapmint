@@ -5,8 +5,25 @@ export interface PrintRequest {
   wallet_address: string;
   asset_id: string;
   status: "pending" | "in_progress" | "completed" | "collected";
+  tshirt_size: "S" | "M" | "L" | "XL";
   created_at: string;
   updated_at: string;
+}
+
+export interface Settings {
+  id: number;
+  is_paused: boolean;
+  max_print_requests: number;
+  current_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BoothStatus {
+  is_paused: boolean;
+  max_print_requests: number;
+  current_count: number;
+  available: boolean;
 }
 
 export interface PaginatedResponse<T> {
@@ -82,15 +99,22 @@ export const printRequestApi = {
   // Create a new print request
   create: async (
     walletAddress: string,
-    assetId: number
+    assetId: number,
+    tshirtSize: "S" | "M" | "L" | "XL"
   ): Promise<PrintRequest> => {
     return apiRequest<PrintRequest>("/print-request", {
       method: "POST",
       body: JSON.stringify({
         wallet_address: walletAddress,
         asset_id: assetId,
+        tshirt_size: tshirtSize,
       }),
     });
+  },
+
+  // Get booth status (public)
+  getBoothStatus: async (): Promise<BoothStatus> => {
+    return apiRequest<BoothStatus>("/booth-status");
   },
 
   freeMintStatus: async (
@@ -190,5 +214,20 @@ export const adminApi = {
   // Admin logout
   logout: (): void => {
     removeAdminToken();
+  },
+
+  // Get settings
+  getSettings: async (): Promise<Settings> => {
+    return authenticatedRequest<Settings>("/admin/settings");
+  },
+
+  // Update settings
+  updateSettings: async (
+    settings: Partial<Pick<Settings, "is_paused" | "max_print_requests">>
+  ): Promise<Settings> => {
+    return authenticatedRequest<Settings>("/admin/settings", {
+      method: "PATCH",
+      body: JSON.stringify(settings),
+    });
   },
 };

@@ -35,3 +35,55 @@ export const getStatusColor = (status: string) => {
       return "";
   }
 };
+
+/**
+ * Processes IPFS URLs to extract CID and convert to IPFS gateway URL
+ * Supports various IPFS URL formats:
+ * - ipfs://Qm...
+ * - ipfs://ipfs/Qm...
+ * - https://ipfs.io/ipfs/Qm...
+ * - https://gateway.pinata.cloud/ipfs/Qm...
+ * - Qm... (just CID)
+ * 
+ * @param url - The IPFS URL or regular URL
+ * @returns Processed URL using IPFS gateway from env, or original URL if not IPFS
+ */
+export const processIpfsUrl = (url: string | undefined | null): string => {
+  if (!url) return "";
+
+  const ipfsGateway = import.meta.env.VITE_IPFS_GATEWAY || "https://ipfs.io/ipfs/";
+  
+  // Remove trailing slash from gateway if present
+  const gateway = ipfsGateway.endsWith("/") ? ipfsGateway.slice(0, -1) : ipfsGateway;
+
+  // Extract CID from various IPFS URL formats
+  let cid = "";
+
+  // Format: ipfs://Qm... or ipfs://ipfs/Qm...
+  if (url.startsWith("ipfs://")) {
+    cid = url.replace("ipfs://", "").replace("ipfs/", "");
+  }
+  // Format: https://ipfs.io/ipfs/Qm... or https://gateway.pinata.cloud/ipfs/Qm...
+  else if (url.includes("/ipfs/")) {
+    const parts = url.split("/ipfs/");
+    if (parts.length > 1) {
+      cid = parts[1]
+    }
+  }
+  // Format: Just CID (Qm... or bafy...)
+  else if (/^Qm[1-9A-HJ-NP-Za-km-z]{44}$|^baf[a-z0-9]{56,}$/.test(url)) {
+    cid = url;
+  }
+  // Not an IPFS URL, return as-is
+  else {
+    return url;
+  }
+
+  // If we extracted a CID, construct gateway URL
+  if (cid) {
+    return `${gateway}/${cid}`;
+  }
+
+  // Fallback: return original URL
+  return url;
+};

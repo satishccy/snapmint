@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { PrismaClient, PrintRequestStatus } from "@prisma/client";
+import { PrismaClient, PrintRequestStatus, TShirtSize } from "@prisma/client";
 import { authenticateAdmin, AuthRequest } from "../middleware/auth";
 import algosdk, { decodeUnsignedTransaction, base64ToBytes } from "algosdk";
 import { algodClient, feePoolAccount, indexerClient } from "../utils";
@@ -7,14 +7,90 @@ import { algodClient, feePoolAccount, indexerClient } from "../utils";
 const router: Router = Router();
 const prisma = new PrismaClient();
 
+// GET /booth-status - Get current booth status (public)
+router.get("/booth-status", async (req: Request, res: Response) => {
+  try {
+    // Get or create default settings
+    let settings = await prisma.settings.findFirst();
+
+    if (!settings) {
+      // Initialize default settings if none exist
+      settings = await prisma.settings.create({
+        data: {
+          is_paused: false,
+          max_print_requests: 100,
+        },
+      });
+    }
+
+    // Get current print request count
+    const currentCount = await prisma.printRequest.count();
+
+    return res.json({
+      is_paused: settings.is_paused,
+      max_print_requests: settings.max_print_requests,
+      current_count: currentCount,
+      available: !settings.is_paused && currentCount < settings.max_print_requests,
+    });
+  } catch (error) {
+    console.error("Get booth status error:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // POST /print-request - Create a new print request
 router.post("/print-request", async (req: Request, res: Response) => {
   try {
-    const { wallet_address, asset_id } = req.body;
+    const { wallet_address, asset_id, tshirt_size } = req.body;
 
     if (!wallet_address || !asset_id) {
       return res.status(400).json({
         error: "wallet_address and asset_id are required",
+      });
+    }
+
+    // Validate tshirt_size
+    if (!tshirt_size) {
+      return res.status(400).json({
+        error: "tshirt_size is required",
+      });
+    }
+
+    const validSizes: TShirtSize[] = [
+      TShirtSize.S,
+      TShirtSize.M,
+      TShirtSize.L,
+      TShirtSize.XL,
+    ];
+    if (!validSizes.includes(tshirt_size as TShirtSize)) {
+      return res.status(400).json({
+        error: `Invalid tshirt_size. Must be one of: ${validSizes.join(", ")}`,
+      });
+    }
+
+    // Check booth status - get or create default settings
+    let settings = await prisma.settings.findFirst();
+    if (!settings) {
+      settings = await prisma.settings.create({
+        data: {
+          is_paused: false,
+          max_print_requests: 100,
+        },
+      });
+    }
+
+    // Check if booth is paused
+    if (settings.is_paused) {
+      return res.status(503).json({
+        error: "Print booth is currently paused and not accepting new requests",
+      });
+    }
+
+    // Check if limit is reached
+    const currentCount = await prisma.printRequest.count();
+    if (currentCount >= settings.max_print_requests) {
+      return res.status(503).json({
+        error: `Print request limit reached (${settings.max_print_requests} requests). Please try again later.`,
       });
     }
 
@@ -38,6 +114,7 @@ router.post("/print-request", async (req: Request, res: Response) => {
         wallet_address,
         asset_id: String(asset_id),
         status: PrintRequestStatus.pending,
+        tshirt_size: tshirt_size as TShirtSize,
       },
     });
 

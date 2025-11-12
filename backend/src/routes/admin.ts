@@ -1,7 +1,10 @@
 import { Router, Request, Response } from "express";
 import jwt from "jsonwebtoken";
+import { PrismaClient } from "@prisma/client";
+import { authenticateAdmin, AuthRequest } from "../middleware/auth";
 
 const router: Router = Router();
+const prisma = new PrismaClient();
 
 router.post("/admin-login", async (req: Request, res: Response) => {
   try {
@@ -45,6 +48,100 @@ router.post("/admin-login", async (req: Request, res: Response) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// GET /admin/settings - Get current settings
+router.get(
+  "/admin/settings",
+  authenticateAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      // Get or create default settings
+      let settings = await prisma.settings.findFirst();
+
+      if (!settings) {
+        // Initialize default settings if none exist
+        settings = await prisma.settings.create({
+          data: {
+            is_paused: false,
+            max_print_requests: 100,
+          },
+        });
+      }
+
+      // Get current print request count
+      const currentCount = await prisma.printRequest.count();
+
+      return res.json({
+        ...settings,
+        current_count: currentCount,
+      });
+    } catch (error) {
+      console.error("Get settings error:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// PATCH /admin/settings - Update settings
+router.patch(
+  "/admin/settings",
+  authenticateAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { is_paused, max_print_requests } = req.body;
+
+      // Validate max_print_requests if provided
+      if (max_print_requests !== undefined) {
+        if (
+          typeof max_print_requests !== "number" ||
+          max_print_requests < 1
+        ) {
+          return res.status(400).json({
+            error: "max_print_requests must be a positive number",
+          });
+        }
+      }
+
+      // Get or create default settings
+      let settings = await prisma.settings.findFirst();
+
+      if (!settings) {
+        // Initialize default settings if none exist
+        settings = await prisma.settings.create({
+          data: {
+            is_paused: false,
+            max_print_requests: 100,
+          },
+        });
+      }
+
+      // Update settings
+      const updateData: any = {};
+      if (is_paused !== undefined) {
+        updateData.is_paused = Boolean(is_paused);
+      }
+      if (max_print_requests !== undefined) {
+        updateData.max_print_requests = max_print_requests;
+      }
+
+      const updatedSettings = await prisma.settings.update({
+        where: { id: settings.id },
+        data: updateData,
+      });
+
+      // Get current print request count
+      const currentCount = await prisma.printRequest.count();
+
+      return res.json({
+        ...updatedSettings,
+        current_count: currentCount,
+      });
+    } catch (error) {
+      console.error("Update settings error:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
 
 export default router;
 

@@ -48,6 +48,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3543}
         VITE_PINATA_JWT: ${VITE_PINATA_JWT:-}
+        VITE_IPFS_GATEWAY: ${VITE_IPFS_GATEWAY:-https://ipfs.io/ipfs/}
         BASE_PATH: ${BASE_PATH:-/}
     ports:
       - "8081:80"

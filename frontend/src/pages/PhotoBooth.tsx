@@ -7,20 +7,12 @@ import { printRequestApi, PrintRequest, PaginatedResponse } from "@/lib/api";
 import { Network, AssetFactory } from "arcraft";
 import { PrintStatusCard } from "@/components/PrintStatusCard";
 import { useNetwork } from "@txnlab/use-wallet-react";
+import { processIpfsUrl } from "@/lib/utils";
 
-interface PrintRequestWithMetadata extends PrintRequest {
-  photos?: {
-    image_url: string;
-    title: string;
-  };
-  profiles?: {
-    username: string;
-  };
-}
 
 export default function PhotoBooth() {
   const { activeNetwork } = useNetwork();
-  const [requests, setRequests] = useState<PrintRequestWithMetadata[]>([]);
+  const [requests, setRequests] = useState<PrintRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -38,49 +30,7 @@ export default function PhotoBooth() {
         await printRequestApi.getAll(page, limit);
       setTotalPages(response.pagination.totalPages);
       setTotal(response.pagination.total);
-
-      // Fetch metadata for each asset (optional - can be done lazily)
-      const requestsWithMetadata = await Promise.all(
-        response.data.map(async (request) => {
-          try {
-            const assetIns = await AssetFactory.fromId(
-              Number(request.asset_id),
-              activeNetwork as Network
-            );
-
-            if ("getImageUrl" in assetIns) {
-              return {
-                ...request,
-                photos: {
-                  image_url: assetIns.getImageUrl(),
-                  title: assetIns.getName(),
-                },
-                profiles: {
-                  username: request.wallet_address.slice(0, 8) + "...",
-                },
-              };
-            }
-          } catch (error) {
-            console.error(
-              `Failed to fetch metadata for asset ${request.asset_id}:`,
-              error
-            );
-          }
-
-          return {
-            ...request,
-            photos: {
-              image_url: "",
-              title: `Asset #${request.asset_id}`,
-            },
-            profiles: {
-              username: request.wallet_address.slice(0, 8) + "...",
-            },
-          };
-        })
-      );
-
-      setRequests(requestsWithMetadata);
+      setRequests(response.data);
     } catch (error) {
       toast.error("Failed to load print requests");
     } finally {
@@ -130,8 +80,6 @@ export default function PhotoBooth() {
               <PrintStatusCard
                 key={request.id}
                 printRequest={request}
-                // imageUrl={request.photos?.image_url}
-                title={request.photos?.title}
                 showWalletPrefix={true}
               />
             ))}

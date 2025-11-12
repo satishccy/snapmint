@@ -19,11 +19,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { printRequestApi, PrintRequest, getAdminToken } from "@/lib/api";
+import {
+  printRequestApi,
+  PrintRequest,
+  getAdminToken,
+  adminApi,
+  Settings,
+} from "@/lib/api";
 import { Network, AssetFactory } from "arcraft";
 import { useNetwork } from "@txnlab/use-wallet-react";
-import { Download, Loader2 } from "lucide-react";
+import { Download, Loader2, Pause, Play, ChevronLeft, ChevronRight } from "lucide-react";
 import { downloadImageAsPDF } from "@/lib/pdfUtils";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { processIpfsUrl } from "@/lib/utils";
 
 interface PrintRequestWithMetadata extends PrintRequest {
   photos?: {
@@ -44,6 +53,13 @@ export default function Admin() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [downloadingIds, setDownloadingIds] = useState<Set<number>>(new Set());
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [loadingSettings, setLoadingSettings] = useState(false);
+  const [maxRequestsInput, setMaxRequestsInput] = useState<string>("");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const limit = 20;
 
   useEffect(() => {
     checkAdminAccess();
@@ -51,9 +67,21 @@ export default function Admin() {
 
   useEffect(() => {
     if (isAdmin) {
+      fetchSettings();
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      setPage(1); // Reset to first page when filter changes
+    }
+  }, [statusFilter, isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin) {
       fetchPrintRequests();
     }
-  }, [isAdmin, statusFilter]);
+  }, [isAdmin, statusFilter, page]);
 
   const checkAdminAccess = async () => {
     try {
@@ -68,10 +96,73 @@ export default function Admin() {
     }
   };
 
+  const fetchSettings = async () => {
+    try {
+      setLoadingSettings(true);
+      const settingsData = await adminApi.getSettings();
+      setSettings(settingsData);
+      setMaxRequestsInput(settingsData.max_print_requests.toString());
+    } catch (error: any) {
+      if (
+        error.message.includes("Unauthorized") ||
+        error.message.includes("No admin token")
+      ) {
+        toast.error("Please login as admin");
+        navigate("/admin-auth");
+      } else {
+        toast.error("Failed to load settings");
+      }
+    } finally {
+      setLoadingSettings(false);
+    }
+  };
+
+  const handleTogglePause = async () => {
+    if (!settings) return;
+
+    try {
+      const updatedSettings = await adminApi.updateSettings({
+        is_paused: !settings.is_paused,
+      });
+      setSettings(updatedSettings);
+      toast.success(
+        updatedSettings.is_paused
+          ? "Print booth paused"
+          : "Print booth resumed"
+      );
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update pause status");
+    }
+  };
+
+  const handleUpdateMaxRequests = async () => {
+    if (!settings) return;
+
+    const newMax = parseInt(maxRequestsInput, 10);
+    if (isNaN(newMax) || newMax < 1) {
+      toast.error("Please enter a valid positive number");
+      setMaxRequestsInput(settings.max_print_requests.toString());
+      return;
+    }
+
+    try {
+      const updatedSettings = await adminApi.updateSettings({
+        max_print_requests: newMax,
+      });
+      setSettings(updatedSettings);
+      toast.success("Max print requests updated");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update max requests");
+      setMaxRequestsInput(settings.max_print_requests.toString());
+    }
+  };
+
   const fetchPrintRequests = async () => {
     try {
       setLoading(true);
-      const response = await printRequestApi.getAllAdmin(1, 100, statusFilter);
+      const response = await printRequestApi.getAllAdmin(page, limit, statusFilter);
+      setTotalPages(response.pagination.totalPages);
+      setTotal(response.pagination.total);
 
       // Fetch metadata for each asset client-side
       const requestsWithMetadata = await Promise.all(
@@ -86,7 +177,7 @@ export default function Admin() {
               return {
                 ...request,
                 photos: {
-                  image_url: assetIns.getImageUrl(),
+                  image_url: processIpfsUrl(assetIns.getImageUrl()),
                   title: assetIns.getName(),
                 },
                 profiles: {
@@ -165,7 +256,7 @@ export default function Admin() {
     setDownloadingIds((prev) => new Set(prev).add(request.id));
     try {
       await downloadImageAsPDF(
-        request.photos.image_url,
+        processIpfsUrl(request.photos.image_url),
         `print-request-${request.id}-${request.photos.title || request.asset_id}`
       );
       toast.success("PDF downloaded successfully");
@@ -248,6 +339,83 @@ export default function Admin() {
           </p>
         </div>
 
+        {/* Settings Section */}
+        {settings && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Booth Settings</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                {/* Pause/Resume Toggle */}
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={handleTogglePause}
+                    variant={settings.is_paused ? "destructive" : "default"}
+                    className="flex items-center gap-2"
+                  >
+                    {settings.is_paused ? (
+                      <>
+                        <Pause className="h-4 w-4" />
+                        Paused
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4" />
+                        Active
+                      </>
+                    )}
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={
+                        settings.is_paused
+                          ? "bg-red-500/10 text-red-500 border-red-500/20"
+                          : "bg-green-500/10 text-green-500 border-green-500/20"
+                      }
+                    >
+                      {settings.is_paused ? "Paused" : "Available"}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Max Requests Editor */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">
+                    Max Print Requests:
+                  </label>
+                  <Input
+                    type="number"
+                    value={maxRequestsInput}
+                    onChange={(e) => setMaxRequestsInput(e.target.value)}
+                    onBlur={handleUpdateMaxRequests}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleUpdateMaxRequests();
+                      }
+                    }}
+                    className="w-24"
+                    min="1"
+                  />
+                  <Button
+                    onClick={handleUpdateMaxRequests}
+                    variant="outline"
+                    size="sm"
+                  >
+                    Save
+                  </Button>
+                </div>
+
+                {/* Current Count Display */}
+                <div className="text-sm text-muted-foreground">
+                  Current: {settings.current_count} / {settings.max_print_requests}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Status Filter */}
         <div className="mb-6 flex items-center gap-4">
           <label htmlFor="status-filter" className="text-sm font-medium">
@@ -266,7 +434,8 @@ export default function Admin() {
             </SelectContent>
           </Select>
           <div className="text-sm text-muted-foreground">
-            Showing {requests.length} request{requests.length !== 1 ? "s" : ""}
+            Showing {requests.length} of {total} request{total !== 1 ? "s" : ""}
+            {totalPages > 1 && ` (Page ${page} of ${totalPages})`}
           </div>
         </div>
 
@@ -279,6 +448,7 @@ export default function Admin() {
                 <TableHead className="w-[120px]">Image</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Wallet Address</TableHead>
+                <TableHead>T-Shirt Size</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[250px]">Actions</TableHead>
               </TableRow>
@@ -286,7 +456,7 @@ export default function Admin() {
             <TableBody>
               {requests.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     <p className="text-muted-foreground">
                       No print requests found
                     </p>
@@ -307,7 +477,7 @@ export default function Admin() {
                       {request.photos?.image_url ? (
                         <div className="relative w-20 h-20 rounded-lg overflow-hidden border">
                           <img
-                            src={request.photos.image_url}
+                            src={processIpfsUrl(request.photos.image_url)}
                             alt={request.photos.title || `Asset #${request.asset_id}`}
                             className="w-full h-full object-cover"
                           />
@@ -328,6 +498,12 @@ export default function Admin() {
                           {request.wallet_address}
                         </p>
                       </div>
+                    </TableCell>
+
+                    <TableCell>
+                      <Badge variant="outline" className="font-medium">
+                        {request.tshirt_size}
+                      </Badge>
                     </TableCell>
 
                     <TableCell>
@@ -367,6 +543,56 @@ export default function Admin() {
             </TableBody>
           </Table>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="mt-6 flex items-center justify-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1 || loading}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Previous
+            </Button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (page <= 3) {
+                  pageNum = i + 1;
+                } else if (page >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = page - 2 + i;
+                }
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={page === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPage(pageNum)}
+                    disabled={loading}
+                    className="min-w-[2.5rem]"
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages || loading}
+            >
+              Next
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        )}
       </div>
     </Layout>
   );

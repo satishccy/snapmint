@@ -18,11 +18,19 @@ enum PrintRequestStatus {
   collected
 }
 
+enum TShirtSize {
+  S
+  M
+  L
+  XL
+}
+
 model PrintRequest {
   id            Int               @id @default(autoincrement())
   wallet_address String           @db.VarChar(255)
   asset_id      String            @db.VarChar(255)
   status        PrintRequestStatus @default(pending)
+  tshirt_size   TShirtSize
   created_at    DateTime          @default(now())
   updated_at    DateTime          @updatedAt
 
@@ -38,4 +46,14 @@ model FreeMint {
 
   @@index([wallet_address])
   @@map("free_mints")
+}
+
+model Settings {
+  id                Int      @id @default(autoincrement())
+  is_paused         Boolean  @default(false)
+  max_print_requests Int     @default(100)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  @@map("settings")
 }
